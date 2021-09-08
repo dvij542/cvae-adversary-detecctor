@@ -127,7 +127,3 @@ def S_BIM(model,model_detector,X,target,epsilon,sigma,epsilon_step,no_of_steps):
     return X + torch.clip(diff,-epsilon,epsilon) 
 
 
-
-from torch.autograd import Variable
-from utee import selector
-model_raw, ds_fetcher, is_imagenet = selector.select('cifar10')
