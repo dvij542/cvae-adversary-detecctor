@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 import torch 
 from model import *
 import numpy as np
-from ..adveraries import *
+from adveraries import *
 model_raw, ds_fetcher, is_imagenet = selector.select('cifar10')
 
 mnist_transform = transforms.Compose([
