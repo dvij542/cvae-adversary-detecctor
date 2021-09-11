@@ -2,12 +2,8 @@
 CVAE based Adversary detection algorithm for image classification networks
 
 # Install dependencies
-Execute these commands to install the required dependencies
-`git clone https://github.com/aaron-xichen/pytorch-playground.git`
-`cd pytorch-playground`
-`python setup.py develop --user`
-`pip install -U scikit-learn`
-`pip install pandas`
+Create a new virtual environment and install dependencies using :-
+`pip install -r requirements.txt`
 
 # Navigate to the dataset folder to test on 
 `cd <MNIST/CIFAR-10>`
