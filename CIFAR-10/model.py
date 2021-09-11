@@ -21,12 +21,12 @@ class VAE_conv(nn.Module):
         self.channel_num = channel_num
         self.kernel_num = kernel_num
         self.z_size = z_size
-        self.n_labels = n_labels
+
         # encoder
         self.encoder = nn.Sequential(
             self._conv(channel_num, kernel_num // 4),
             self._conv(kernel_num // 4, kernel_num // 2),
-            self._conv(kernel_num // 2, kernel_num, last=False),
+            self._conv(kernel_num // 2, kernel_num, last=True),
         )
 
         # encoded feature's size and volume
@@ -57,7 +57,7 @@ class VAE_conv(nn.Module):
         # encode x
         encoded = self.encoder(x)
         if self.conditional:
-            c = idx2onehot(c, n=self.n_labels)
+            c = idx2onehot(c, n=n_labels)
             # encoded = torch.cat((encoded, c), dim=-1)
         # sample latent code z from q given x.
         mean, logvar = self.q(encoded,c)

@@ -8,6 +8,10 @@ import torch
 from model import *
 import numpy as np
 from adveraries import *
+import matplotlib.pyplot as plt
+import pickle
+from sklearn import metrics
+
 model_raw, ds_fetcher, is_imagenet = selector.select('cifar10')
 
 mnist_transform = transforms.Compose([
@@ -45,8 +49,9 @@ label_class = 1# birds
 
 models = []
 avg_recon_error = []
-for clas in range(10) :
-    print(clas)
+print("Loading CVAE model:- ")
+for clas in range(0,10) :
+    print("Loading model for class ", clas)
     model = VAE_conv(
             label='Cifar10',
             image_size=32,
@@ -73,7 +78,6 @@ avg_recon_error = torch.tensor(np.array(avg_recon_error)).unsqueeze(1).to(DEVICE
 # Experiments
 
 np.random.seed(1)
-import matplotlib.pyplot as plt
 
 types = ['normal','random','fgsm','fgsm-L2','R-fgsm','R-fgsm-L2','BIM','BIM-L2','CW','S-BIM']          
 data_loader = DataLoader(
@@ -82,16 +86,26 @@ data_loader = DataLoader(
 recons_errors = {}
 no_of_incorrects = {}
 no_of_corrects = {}
+curr_i = {}
 for t in types :
-  recons_errors[t] = []
+  recons_errors[t] = np.zeros(16*len(data_loader))
   no_of_incorrects[t] = 0
   no_of_corrects[t] = 0
+  curr_i[t] = 0
 model.eval()
+
+epsilon1 = 500/255
+epsilon_step1 = 60/255
+sigma = 0.5
+no_of_iters = 12
+no_of_iters1 = 12
+epsilon_random = 2/255
+
 epsilon = 20/255
 epsilon_step = 4/255
 sigma = 0.5
-no_of_iters = 10
-epsilon_random = 2/255
+no_of_iters = 12
+epsilon_random = 4/255
 
 for iteration, (x, y) in enumerate(tqdm(data_loader,position=0,leave=True)):
     x, y = x.to(DEVICE), y.to(DEVICE)
@@ -99,25 +113,25 @@ for iteration, (x, y) in enumerate(tqdm(data_loader,position=0,leave=True)):
         if t == 'normal' :
           x_type = x
         if t == 'random' :
-          x_type = random(x,epsilon/2)
+          x_type = random(x,epsilon)
         if t == 'fgsm' :
           x_type = fgsm(model_raw,x,y,epsilon)
         if t == 'fgsm-L2' :
-          x_type = fgsm_L2(model_raw,x,y,2*epsilon)
+          x_type = fgsm_L2(model_raw,x,y,epsilon1)
         if t == 'R-fgsm' :
           x_type = R_fgsm(model_raw,x,y,epsilon,epsilon_random)
         if t == 'R-fgsm-L2' :
-          x_type = R_fgsm_L2(model_raw,x,y,2*epsilon,epsilon_random)
+          x_type = R_fgsm_L2(model_raw,x,y,epsilon1,epsilon_random)
         if t == 'BIM' :
           x_type = BIM(model_raw,x,y,epsilon,epsilon_step,no_of_iters)
         if t == 'BIM-L2' :
-          x_type = BIM_L2(model_raw,x,y,epsilon,epsilon_step,no_of_iters)
+          x_type = BIM_L2(model_raw,x,y,epsilon1,epsilon_step1,no_of_iters)
         if t == 'CW' :
           rands = torch.randint(0,9,(x.shape[0],)).to(DEVICE)
           x_type = CW(model_raw,x,y,epsilon,epsilon_step,no_of_iters,2,(rands<y)*rands + (rands>=y)*(rands+1)) 
         if t == 'S-BIM' :
           rands = torch.randint(0,9,(x.shape[0],)).to(DEVICE)
-          x_type = S_BIM(model_raw,models,x,(rands<y)*rands + (rands>=y)*(rands+1),epsilon,sigma,epsilon_step,no_of_iters//2)
+          x_type = S_BIM(model_raw,models,x,(rands<y)*rands + (rands>=y)*(rands+1),epsilon,sigma,epsilon_step,no_of_iters)
 
         y_type = torch.argmax(model_raw(x_type),1)
         no_of_incorrects[t] += torch.sum((y_type!=y))
@@ -126,18 +140,15 @@ for iteration, (x, y) in enumerate(tqdm(data_loader,position=0,leave=True)):
             indexes = (y_type!=y).nonzero()
             x_type = x_type[indexes[:,0],:,:,:]
             y_type = y_type[indexes[:,0]]
-        else: 
-            indexes = (y_type==y).nonzero()
-            x_type = x_type[indexes[:,0],:,:,:]
-            y_type = y_type[indexes[:,0]]
-        
-        recon_x_type = get_recon(models,x_type, y_type)
         if x_type.shape[0]!=0:
             recon_x_type = get_recon(models,x_type, y_type)
-            recons_errors[t].append(torch.mean((recon_x_type.detach().view(-1, 32*32*3)-x_type.detach().view(-1, 32*32*3))**2,dim=1))
+            recons_errors[t][curr_i[t]:(curr_i[t]+x_type.shape[0])] = torch.mean((recon_x_type.detach().view(-1, 32*32*3)-x_type.detach().view(-1, 32*32*3))**2).cpu().numpy()
+            curr_i[t] += x_type.shape[0]
+    # break
 
 for t in types :
-    recons_errors[t] = torch.cat(recons_errors[t],dim=0).cpu().numpy()
+    recons_errors[t] = recons_errors[t][:curr_i[t]]
+
 
 types =         ['normal','random','fgsm' ,'fgsm-L2','R-fgsm','R-fgsm-L2','BIM'   ,'BIM-L2','CW'  ,'S-BIM']          
 type_colors_l = ['blue'  ,'red'   ,'brown','yellow' ,'green' ,'purple'   ,'orange','violet','grey','pink' ]
@@ -148,13 +159,11 @@ for t in types :
   itr += 1 
 
 # np.savetxt('recons_errors.txt',recons_errors)
-import pickle
 geeky_file = open('recons_errors.txt', 'wb')
 pickle.dump(recons_errors, geeky_file)
 geeky_file.close()
 
 # types = ['normal','S-BIM'] 
-import matplotlib.pyplot as plt
 ref = []
 
 for iteration, (x, y) in enumerate(tqdm(data_loader,position=0,leave=True)):
@@ -216,7 +225,6 @@ for t in types :
 plt.savefig('p-values.png')
 plt.show()  
 
-from sklearn import metrics
 tpr = {}
 for t in types :
   tpr[t] = []

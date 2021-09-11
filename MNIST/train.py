@@ -16,6 +16,7 @@ mnist_transform = transforms.Compose([
         transforms.ToTensor(),
 ])
 
+PLOT = False
 kwargs = {} 
 def get_same_index(target, label):
     label_indices = []
@@ -39,7 +40,7 @@ label_class = 1 # ones
 
 def loss_fn(recon_x, x, mean, log_var):
     BCE = torch.nn.functional.binary_cross_entropy(
-        recon_x.view(-1, 32*32*3), x.view(-1, 32*32*3), reduction='sum')
+        recon_x.view(-1, 28*28*1), x.view(-1, 28*28*1), reduction='sum')
     KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
 
     return (BCE + KLD) / x.size(0)
@@ -65,11 +66,18 @@ data_loader = DataLoader(
     dataset=test_dataset_raw, batch_size=batch_size, shuffle=True)
 
 # data_loader = test_loader
-
+epochs=50
+learning_rate=0.001
+latent_size=128
+print_every=100
+fig_root='figs'
+device = 'cuda'
+n_labels = 10
 
 logs = defaultdict(list)
 for clas in range(10) :
     conditional = False
+    print("Training for class ", str(clas))
     model = VAE_conv(
             label='MNIST',
             image_size=28,
@@ -84,6 +92,8 @@ for clas in range(10) :
     bird_set = torch.utils.data.Subset(train_dataset_raw, train_indices)
     train_loader_dash = torch.utils.data.DataLoader(dataset=bird_set, shuffle=True,
                                            batch_size=batch_size, drop_last=True)
+    # plt.figure(figsize=(5, 10))
+    # plt.show(block=False)
     for epoch in range(epochs):
         tracker_epoch = defaultdict(lambda: defaultdict(dict))
         for iteration, (x, y) in enumerate(train_loader_dash):
@@ -123,16 +133,18 @@ for clas in range(10) :
                     x_dash[:4,:,:,:] = x[:4,:,:,:]
 
                 # plt.figure()
-                plt.figure(figsize=(5, 10))
-                for p in range(10):
-                    plt.subplot(5, 2, p+1)
-                    if conditional:
-                        plt.text(
-                            0, 0, "c={:d}".format(c[p].item()), color='black',
-                            backgroundcolor='white', fontsize=8)
-                    plt.imshow(x_dash[p].view(1,28,28).permute(1,2,0)[:,:,0].cpu().data.numpy())
-                    plt.axis('off')
-                plt.show()
+                # if 
+                if PLOT : 
+                    plt.figure(figsize=(5, 10))
+                    for p in range(10):
+                        plt.subplot(5, 2, p+1)
+                        if conditional:
+                            plt.text(
+                                0, 0, "c={:d}".format(c[p].item()), color='black',
+                                backgroundcolor='white', fontsize=8)
+                        plt.imshow(x_dash[p].view(1,28,28).permute(1,2,0)[:,:,0].cpu().data.numpy())
+                        plt.axis('off')
+                    plt.show()
                 # plt.clf()
                 # plt.close('all')
 

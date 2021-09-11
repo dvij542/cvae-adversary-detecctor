@@ -17,6 +17,8 @@ mnist_transform = transforms.Compose([
 ])
 
 kwargs = {} 
+PLOT = False
+
 def get_same_index(target, label):
     label_indices = []
     for i in range(len(target)):
@@ -91,11 +93,12 @@ data_loader = DataLoader(
 logs = defaultdict(list)
 for clas in range(10) :
     conditional = False
+    print("Training for class ", str(clas))
     model = VAE_conv(
             label='Cifar10',
             image_size=32,
             channel_num=3,
-            kernel_num=512,
+            kernel_num=128,
             z_size=128,
             conditional=False,
             n_labels=10
@@ -144,16 +147,17 @@ for clas in range(10) :
                     x_dash[:4,:,:,:] = x[:4,:,:,:]
 
                 # plt.figure()
-                plt.figure(figsize=(5, 10))
-                for p in range(10):
-                    plt.subplot(5, 2, p+1)
-                    if conditional:
-                        plt.text(
-                            0, 0, "c={:d}".format(c[p].item()), color='black',
-                            backgroundcolor='white', fontsize=8)
-                    plt.imshow(x_dash[p].view(3,32,32).permute(1,2,0).cpu().data.numpy())
-                    plt.axis('off')
-                plt.show()
+                if PLOT :
+                    plt.figure(figsize=(5, 10))
+                    for p in range(10):
+                        plt.subplot(5, 2, p+1)
+                        if conditional:
+                            plt.text(
+                                0, 0, "c={:d}".format(c[p].item()), color='black',
+                                backgroundcolor='white', fontsize=8)
+                        plt.imshow(x_dash[p].view(3,32,32).permute(1,2,0).cpu().data.numpy())
+                        plt.axis('off')
+                    plt.show()
                 # plt.clf()
                 # plt.close('all')
 

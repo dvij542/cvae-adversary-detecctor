@@ -17,16 +17,13 @@ def get_recon(models,X,Y) :
     recons = torch.cat(recons)
     return recons
 
-def random(X, epsilon) :
-    delta = 2*torch.rand_like(X).to(DEVICE) - 1
-    return torch.clip(X + epsilon*delta,-1.,1.)
 
 def fgsm(model, X, y, epsilon):
     """ Construct FGSM adversarial examples on the examples X"""
     delta = torch.zeros_like(X, requires_grad=True)
     loss = nn.CrossEntropyLoss()(model(X + delta), y)
     loss.backward()
-    return torch.clip(X + epsilon * delta.grad.detach().sign(),-1.,1.)
+    return X + epsilon * delta.grad.detach().sign()
 
 def fgsm_L2(model, X, y, epsilon):
     """ Construct FGSM-L2 adversarial examples on the examples X"""
@@ -44,6 +41,7 @@ def R_fgsm_L2(model, X, y, epsilon, alpha):
     """ Construct R-FGSM adversarial examples on the examples X"""
     delta = torch.zeros_like(X, requires_grad=True)
     return fgsm_L2(model, random(X,alpha), y, epsilon)
+
 
 def BIM(model, X, y, epsilon, epsilon_step, no_of_steps):
     """ Construct BIM adversarial examples on the examples X"""
@@ -71,6 +69,10 @@ def BIM_L2(model, X, y, epsilon, epsilon_step, no_of_steps):
               / torch.norm(torch.norm((diff.detach()),dim=2,keepdim=True),\
               dim=3,keepdim=True)
     return Xi + diff*factor
+
+def random(X, epsilon) :
+    delta = torch.rand_like(X).to(DEVICE) - .5
+    return X + epsilon*delta
 
 def CW(model,X,y,epsilon,epsilon_step,no_of_steps,c,target):
     """ Construct CW adversarial examples on the examples X"""
@@ -125,5 +127,4 @@ def S_BIM(model,model_detector,X,target,epsilon,sigma,epsilon_step,no_of_steps):
       Xn = Xn.clone() + epsilon_step * delta.grad.detach().sign()
     diff = Xn - X
     return X + torch.clip(diff,-epsilon,epsilon) 
-
 

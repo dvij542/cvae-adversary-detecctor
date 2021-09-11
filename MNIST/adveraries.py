@@ -42,6 +42,7 @@ def R_fgsm_L2(model, X, y, epsilon, alpha):
     delta = torch.zeros_like(X, requires_grad=True)
     return fgsm_L2(model, random(X,alpha), y, epsilon)
 
+
 def BIM(model, X, y, epsilon, epsilon_step, no_of_steps):
     """ Construct BIM adversarial examples on the examples X"""
     delta = torch.zeros_like(X, requires_grad=True)
@@ -59,7 +60,7 @@ def BIM_L2(model, X, y, epsilon, epsilon_step, no_of_steps):
     delta = torch.zeros_like(X, requires_grad=True)
     Xi = X.clone()
     for i in range(no_of_steps) :
-          loss = nn.CrossEntropyLoss()(model(X + delta), y)
+      loss = nn.CrossEntropyLoss()(model(X + delta), y)
       loss.backward()
       X = torch.clip(X.clone() + epsilon_step * (delta.grad.detach())/torch.norm((delta.grad.detach()),dim=1,keepdim=True),-1.,1.)
     diff = X - Xi
@@ -71,7 +72,7 @@ def BIM_L2(model, X, y, epsilon, epsilon_step, no_of_steps):
 
 def random(X, epsilon) :
     delta = torch.rand_like(X).to(DEVICE) - .5
-    return torch.clip(X + epsilon*delta,0.,1.)
+    return X + epsilon*delta
 
 def CW(model,X,y,epsilon,epsilon_step,no_of_steps,c,target):
     """ Construct CW adversarial examples on the examples X"""

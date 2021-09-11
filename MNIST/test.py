@@ -8,12 +8,21 @@ import torch
 from model import *
 import numpy as np
 from adveraries import *
+import matplotlib.pyplot as plt
+from sklearn import metrics
+import pickle
 
 cuda = True
 DEVICE = torch.device("cuda" if cuda else "cpu")
 print(DEVICE)
 dataset_path = '~/datasets'
 batch_size = 128
+model_raw, ds_fetcher, is_imagenet = selector.select('mnist')
+
+mnist_transform = transforms.Compose([
+        transforms.ToTensor(),
+])
+kwargs = {} 
 
 train_dataset_raw = MNIST(dataset_path, transform=mnist_transform, train=True, download=True)
 test_dataset_raw  = MNIST(dataset_path, transform=mnist_transform, train=False, download=True)
@@ -53,11 +62,11 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #     num_labels=n_labels if conditional else 0).to(device)
 
 
-
+print("Loading CVAE models :-")
 models = []
 avg_recon_error = []
 for clas in range(10) :
-    print(clas)
+    print("Loading model for class ", str(clas))
     model = VAE_conv(
             label='MNIST',
             image_size=28,
@@ -67,7 +76,7 @@ for clas in range(10) :
             conditional=False,
             n_labels=10
         ).to(device)
-    model.load_state_dict(torch.load('/content/drive/MyDrive/curr_t'+str(clas)+'.pt', map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load('models_trained/curr_t'+str(clas)+'.pt', map_location=torch.device('cpu')))
     models.append(model)
     train_indices = get_same_index(train_dataset_raw.targets, clas)
     bird_set = torch.utils.data.Subset(train_dataset_raw, train_indices)
@@ -80,7 +89,7 @@ for clas in range(10) :
         x_dash.view(-1, 28*28*1), x.view(-1, 28*28*1),reduction='mean').detach().cpu().numpy())
         break
 avg_recon_error = torch.tensor(np.array(avg_recon_error)).unsqueeze(1).to(device)
-print(avg_recon_error)
+# print(avg_recon_error)
 
 # Experiments
 
@@ -95,28 +104,32 @@ data_loader = DataLoader(
 recons_errors = {}
 no_of_incorrects = {}
 no_of_corrects = {}
+curr_i = {}
 for t in types :
-  recons_errors[t] = []
+  recons_errors[t] = np.zeros(16*len(data_loader))
   no_of_incorrects[t] = 0
   no_of_corrects[t] = 0
+  curr_i[t] = 0
+
 model.eval()
 epsilon = 20/255
-epsilon_step = 2/255
+epsilon_step = 4/255
 
 epsilon1 = 500/255
-epsilon_step1 = 30/255
-sigma = 0.7
-no_of_iters = 20
-no_of_iters1 = 20
-epsilon_random = 2/255
+epsilon_step1 = 60/255
+sigma = 0.5
+no_of_iters = 12
+no_of_iters1 = 12
+epsilon_random = 4/255
 
+print("Getting reconstructions errors :- ")
 for iteration, (x, y) in enumerate(tqdm(data_loader,position=0,leave=True)):
     x, y = x.to(device), y.to(device)
     for t in types :
         if t == 'normal' :
           x_type = x
         if t == 'random' :
-          x_type = random(x,epsilon/2)
+          x_type = random(x,epsilon)
         if t == 'fgsm' :
           x_type = fgsm(model_raw,x,y,epsilon)
         if t == 'fgsm-L2' :
@@ -131,7 +144,7 @@ for iteration, (x, y) in enumerate(tqdm(data_loader,position=0,leave=True)):
           x_type = BIM_L2(model_raw,x,y,epsilon1,epsilon_step1,no_of_iters1)
         if t == 'CW' :
           rands = torch.randint(0,9,(x.shape[0],)).to(device)
-          x_type = CW(model_raw,x,y,epsilon,epsilon_step,no_of_iters,2,(rands<y)*rands + (rands>=y)*(rands+1)) 
+          x_type = CW(model_raw,x,y,epsilon,3*epsilon_step,no_of_iters,2,(rands<y)*rands + (rands>=y)*(rands+1)) 
         if t == 'S-BIM' :
           rands = torch.randint(0,9,(x.shape[0],)).to(device)
           x_type = S_BIM(model_raw,models,x,(rands<y)*rands + (rands>=y)*(rands+1),epsilon,sigma,epsilon_step,no_of_iters)
@@ -145,11 +158,12 @@ for iteration, (x, y) in enumerate(tqdm(data_loader,position=0,leave=True)):
             y_type = y_type[indexes[:,0]]
         if x_type.shape[0]!=0:
             recon_x_type = get_recon(models,x_type, y_type)
-            recons_errors[t].append(torch.mean((recon_x_type.detach().view(-1, 28*28*1)-x_type.detach().view(-1, 28*28*1))**2,dim=1))
+            recons_errors[t][curr_i[t]:(curr_i[t]+x_type.shape[0])] = torch.mean((recon_x_type.detach().view(-1, 28*28*1)-x_type.detach().view(-1, 28*28*1))**2,dim=1).cpu().numpy()
+            curr_i[t] += x_type.shape[0]
     # break
 
 for t in types :
-    recons_errors[t] = torch.cat(recons_errors[t],dim=0).cpu().numpy()
+    recons_errors[t] = recons_errors[t][:curr_i[t]]
 
 types =         ['normal','random','fgsm' ,'fgsm-L2','R-fgsm','R-fgsm-L2','BIM'   ,'BIM-L2','CW'  ,'S-BIM']          
 type_colors_l = ['blue'  ,'red'   ,'brown','yellow' ,'green' ,'purple'   ,'orange','violet','grey','pink' ]
@@ -160,12 +174,10 @@ for t in types :
   itr += 1 
 
 # np.savetxt('recons_errors.txt',recons_errors)
-import pickle
 geeky_file = open('recons_errors.txt', 'wb')
 pickle.dump(recons_errors, geeky_file)
 geeky_file.close()
 
-import pickle
 
 geeky_file = open('recons_errors.txt', 'rb')
 # pickle.load()
@@ -178,9 +190,9 @@ for t in types :
   type_color[t] = type_colors_l[itr]
   itr += 1 
 
-import matplotlib.pyplot as plt
-ref = []
 
+ref = []
+print("Getting reference reconstruction errors :- ")
 for iteration, (x, y) in enumerate(tqdm(train_loader,position=0,leave=True)):
     x_type, y = x.to(device), y.to(device)
     y_type = torch.argmax(model_raw(x_type),1)
@@ -208,13 +220,6 @@ plt.title('Adversaries Vs normal examples reconstruction error')
 plt.savefig('recons-errors.png')
 maxfreq = n.max()
 plt.show()
-
-# ref = []
-# for iteration, (x, y) in enumerate(tqdm(train_loader,position=0,leave=True)):
-#     x_type, y = x.to(device), y.to(device)
-#     y_type = torch.argmax(model_raw(x_type),1)
-#     recon_x_type = get_recon(models,x_type, y_type)
-#     ref.append((torch.mean((recon_x_type.detach().view(-1, 28*28*1)-x_type.detach().view(-1, 28*28*1))**2)).cpu().numpy())
 
 pvals = {}
 # ref = np.array(recons_errors['normal'])
@@ -260,7 +265,6 @@ plt.show()
 #   plt.savefig('p-values-mnist-' + t + '.png')
 #   plt.show()
 
-from sklearn import metrics
 tpr = {}
 for t in types :
   tpr[t] = []
